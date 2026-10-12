@@ -1,0 +1,73 @@
+:root {
+  --color-paper: oklch(96% 0.012 54);
+  --color-paper-2: oklch(93% 0.014 54);
+  --color-paper-3: oklch(89% 0.016 54);
+  --color-ink: oklch(20% 0.014 54);
+  --color-ink-2: oklch(25% 0.018 54);
+  --color-neutral: oklch(34% 0.012 54);
+  --color-muted: oklch(27% 0.016 54);
+  --color-rule: oklch(79% 0.016 54);
+  --color-rule-2: oklch(85% 0.014 54);
+  --color-accent: oklch(35% 0.12 34);
+  --color-accent-ink: oklch(96% 0.012 54);
+  --color-focus: oklch(37% 0.13 34);
+  --color-control: oklch(38% 0.016 54);
+  --color-success: oklch(42% 0.09 145);
+  --color-error: oklch(42% 0.13 25);
+
+  --color-stage: oklch(92% 0.022 90);
+  --color-stage-sage: oklch(91% 0.025 145);
+  --color-stage-blue: oklch(92% 0.025 235);
+  --color-stage-clay: oklch(91% 0.026 46);
+  --color-stage-stone: oklch(91% 0.015 65);
+  --shadow-toast: 0 0.6rem 1.8rem oklch(28% 0.018 54 / 0.12);
+
+  --font-display: "Cormorant Garamond", "Bodoni Moda", serif;
+  --font-body: "Manrope", "Avenir Next", sans-serif;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --space-xs: var(--space-2);
+  --space-sm: var(--space-3);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+  --space-2xl: var(--space-12);
+  --space-3xl: var(--space-16);
+  --page-gutter: clamp(var(--space-4), 4vw, var(--space-10));
+
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-base: 1rem;
+  --text-md: 1.2rem;
+  --text-lg: 1.5rem;
+  --text-xl: 1.9rem;
+  --text-2xl: 2.4rem;
+  --text-3xl: 3rem;
+  --text-4xl: 3.8rem;
+  --text-display: clamp(3.1rem, 6.6vw, 6.2rem);
+
+  --radius-sm: 0.12rem;
+  --radius-md: 0.35rem;
+  --radius-round: 999px;
+  --rule-hair: 1px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+  --layer-content: 1;
+  --layer-menu: 10;
+  --layer-toast: 30;
+}
