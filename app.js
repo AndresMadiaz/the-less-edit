@@ -87,16 +87,48 @@ function currentRoute() {
   return { page: "not-found" };
 }
 
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function renderWithTransition() {
+  if (document.startViewTransition && !reducedMotion()) document.startViewTransition(render);
+  else render();
+}
+
+let revealObserver = null;
+
+function observeReveals(scope = document) {
+  if (reducedMotion() || !("IntersectionObserver" in window)) return;
+  if (!revealObserver) {
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.remove("is-reveal-pending");
+        revealObserver.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+  }
+  scope.querySelectorAll("[data-reveal]").forEach((element) => {
+    if (element.dataset.revealObserved) return;
+    element.dataset.revealObserved = "true";
+    if (element.getBoundingClientRect().top > window.innerHeight) element.classList.add("is-reveal-pending");
+    revealObserver.observe(element);
+  });
+}
+
 function navigate(path, moveFocus) {
   if (window.location.pathname !== path) window.history.pushState({}, "", path);
-  render();
+  renderWithTransition();
   if (moveFocus) {
     window.scrollTo(0, 0);
-    const heading = appRoot.querySelector("main h1");
-    if (heading) {
-      heading.setAttribute("tabindex", "-1");
-      heading.focus({ preventScroll: true });
-    }
+    requestAnimationFrame(() => {
+      const heading = appRoot.querySelector("main h1");
+      if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+      }
+    });
   }
 }
 
@@ -118,21 +150,19 @@ function stageClass(product) {
   return "product-stage product-stage--" + escapeHtml(stage);
 }
 
-function garmentSvg(product) {
+function garmentImage(product, eager = false) {
   const cell = Math.max(0, Math.min(20, Number(product.illustration.sheetCell) || 0));
-  const column = cell % 3;
-  const row = Math.floor(cell / 3);
-  const x = column * 50;
-  const y = row * (100 / 6);
-  return "<span class=\"garment-image garment-image--" + cell + " product-stage__art\" role=\"img\" aria-label=\"" + escapeHtml(product.colour + " " + product.name) + "\" style=\"--art-x:" + x + "%;--art-y:" + y + "%\"></span>";
+  const loading = eager ? "eager" : "lazy";
+  const priority = eager ? " fetchpriority=\"high\"" : "";
+  return "<img class=\"product-stage__art\" src=\"/assets/garments/item-" + String(cell).padStart(2, "0") + ".avif\" alt=\"" + escapeHtml(product.colour + " " + product.name) + "\" width=\"626\" height=\"468\" decoding=\"async\" loading=\"" + loading + "\"" + priority + ">";
 }
 
-function productArt(product, role) {
-  return "<a class=\"" + stageClass(product) + "\" href=\"/edit/" + escapeHtml(product.comparisonSlug || "") + "\" data-link aria-label=\"" + escapeHtml(role + ": " + product.brand + " " + product.name) + "\">" + garmentSvg(product) + "</a>";
+function productArt(product, role, eager = false) {
+  return "<a class=\"" + stageClass(product) + "\" href=\"/edit/" + escapeHtml(product.comparisonSlug || "") + "\" data-link aria-label=\"" + escapeHtml(role + ": " + product.brand + " " + product.name) + "\">" + garmentImage(product, eager) + "</a>";
 }
 
-function productArtStatic(product, role) {
-  return "<div class=\"" + stageClass(product) + "\" aria-label=\"" + escapeHtml(role + ": " + product.brand + " " + product.name) + "\">" + garmentSvg(product) + "</div>";
+function productArtStatic(product, role, eager = false) {
+  return "<div class=\"" + stageClass(product) + "\" aria-label=\"" + escapeHtml(role + ": " + product.brand + " " + product.name) + "\">" + garmentImage(product, eager) + "</div>";
 }
 
 function productMeta(product, compact, role) {
@@ -142,13 +172,13 @@ function productMeta(product, compact, role) {
   return "<div class=\"detail-product__meta\"><div><div class=\"detail-product__byline\"><span class=\"detail-product__role\">" + escapeHtml(role) + "</span><span class=\"detail-product__brand\">" + escapeHtml(product.brand) + "</span></div><h2>" + escapeHtml(product.name) + "</h2><div class=\"detail-product__facts\"><span>" + escapeHtml(product.colour) + "</span><span>" + escapeHtml(product.fitDescription) + "</span><span>" + escapeHtml(product.materialComposition) + "</span></div></div><span class=\"detail-product__price\">" + money(product.priceAmount) + "</span></div>";
 }
 
-function pairArt(comparison, alternative, linked) {
+function pairArt(comparison, alternative, linked, eager = false) {
   const reference = productById[comparison.referenceProductId];
   const alt = typeof alternative === "string" ? productById[alternative] : alternative;
   reference.comparisonSlug = comparison.slug;
   alt.comparisonSlug = comparison.slug;
   const draw = linked ? productArt : productArtStatic;
-  return "<div class=\"pair-art\"><div class=\"pair-art__item\">" + draw(reference, "Reference") + productMeta(reference, true, "Reference") + "</div><div class=\"pair-art__item\">" + draw(alt, "Alternative") + productMeta(alt, true, "Alternative") + "</div></div>";
+  return "<div class=\"pair-art\"><div class=\"pair-art__item\">" + draw(reference, "Reference", eager) + productMeta(reference, true, "Reference") + "</div><div class=\"pair-art__item\">" + draw(alt, "Alternative", eager) + productMeta(alt, true, "Alternative") + "</div></div>";
 }
 
 function comparisonCard(comparison, alternative, context) {
@@ -156,7 +186,7 @@ function comparisonCard(comparison, alternative, context) {
   const saving = savingsFor(reference, alternative);
   const tags = comparison.editTags.slice(0, 2).map((tag) => "<span>" + escapeHtml(tag) + "</span>").join("");
   const action = context === "saved" ? saveButton(comparison, alternative.id, "saved") : saveButton(comparison, alternative.id, "feed");
-  return "<article class=\"comparison-card\"><div class=\"comparison-card__art\">" + pairArt(comparison, alternative, true) + "<div class=\"comparison-card__save\">" + action + "</div></div><div class=\"comparison-card__meta\"><div><span class=\"comparison-card__category\">" + escapeHtml(categoryLabels[reference.category]) + " · " + escapeHtml(reference.brand) + "</span><h3><a class=\"comparison-card__title\" href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>" + escapeHtml(comparison.title) + "</a></h3><p class=\"comparison-card__summary\">" + escapeHtml(comparison.editorialReason) + "</p></div><div class=\"comparison-card__savings\">Save " + money(saving.amount) + "<br>" + saving.percent + "% less</div></div><div class=\"comparison-card__actions\"><div class=\"comparison-card__tags\">" + tags + "</div><a class=\"text-link\" href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>Read the edit <span aria-hidden=\"true\">→</span></a></div></article>";
+  return "<article class=\"comparison-card\" data-reveal><div class=\"comparison-card__art\">" + pairArt(comparison, alternative, true) + "<div class=\"comparison-card__save\">" + action + "</div></div><div class=\"comparison-card__meta\"><div><span class=\"comparison-card__category\">" + escapeHtml(categoryLabels[reference.category]) + " · " + escapeHtml(reference.brand) + "</span><h3><a class=\"comparison-card__title\" href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>" + escapeHtml(comparison.title) + "</a></h3><p class=\"comparison-card__summary\">" + escapeHtml(comparison.editorialReason) + "</p></div><div class=\"comparison-card__savings\">Save " + money(saving.amount) + "<br>" + saving.percent + "% less</div></div><div class=\"comparison-card__actions\"><div class=\"comparison-card__tags\">" + tags + "</div><a class=\"text-link\" href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>Read the edit <span aria-hidden=\"true\">→</span></a></div></article>";
 }
 
 function filteredComparisons() {
@@ -207,6 +237,7 @@ function filterMarkup() {
 function updateFeed() {
   const grid = document.getElementById("comparison-grid");
   if (!grid) return;
+  if (revealObserver) grid.querySelectorAll("[data-reveal]").forEach((element) => revealObserver.unobserve(element));
   const matching = filteredComparisons();
   const status = document.getElementById("filter-status");
   if (status) status.textContent = matching.length + (matching.length === 1 ? " edit" : " edits");
@@ -215,6 +246,7 @@ function updateFeed() {
     return;
   }
   grid.innerHTML = matching.map((comparison) => comparisonCard(comparison, cardAlternative(comparison), "feed")).join("");
+  observeReveals(grid);
 }
 
 function featureMarkup() {
@@ -222,13 +254,13 @@ function featureMarkup() {
   const reference = productById[comparison.referenceProductId];
   const alternative = productById[comparison.featuredAlternativeId];
   const saving = savingsFor(reference, alternative);
-  return "<div class=\"feature-edit feature-edit--hero\"><div class=\"feature-edit__topline\"><span>Opening edit · " + escapeHtml(categoryLabels[reference.category]) + "</span>" + saveButton(comparison, alternative.id, "feed") + "</div>" + pairArt(comparison, alternative, true) + "<div class=\"feature-edit__bottomline\"><span>" + money(saving.amount) + " saved · " + saving.percent + "% less</span><a href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>See why it works <span aria-hidden=\"true\">→</span></a></div></div>";
+  return "<div class=\"feature-edit feature-edit--hero\"><div class=\"feature-edit__topline\"><span>Opening edit · " + escapeHtml(categoryLabels[reference.category]) + "</span>" + saveButton(comparison, alternative.id, "feed") + "</div>" + pairArt(comparison, alternative, true, true) + "<div class=\"feature-edit__bottomline\"><span>" + money(saving.amount) + " saved · " + saving.percent + "% less</span><a href=\"/edit/" + escapeHtml(comparison.slug) + "\" data-link>See why it works <span aria-hidden=\"true\">→</span></a></div></div>";
 }
 
 function homePage() {
   const initial = filteredComparisons();
   const initialCards = initial.map((comparison) => comparisonCard(comparison, cardAlternative(comparison), "feed")).join("");
-  return "<main class=\"page-shell\"><section class=\"hero\" aria-labelledby=\"home-title\"><div class=\"hero__copy\"><p class=\"eyebrow\">Expensive taste. Smarter prices.</p><h1 id=\"home-title\">The good eye. The better price.</h1><p class=\"hero__lede\">One considered reference. A thoughtful alternative. The details that make the comparison useful.</p><a class=\"text-link\" href=\"#browse\">Browse the edits <span aria-hidden=\"true\">↓</span></a></div><div class=\"hero__pair\">" + featureMarkup() + "</div></section><section class=\"content-section\" id=\"browse\" aria-labelledby=\"browse-title\"><div class=\"section-head\"><h2 id=\"browse-title\">The edit, in detail</h2><p class=\"section-head__note\">Fictional labels and prices · eight considered comparisons</p></div><div class=\"filter-panel\" role=\"search\" aria-label=\"Filter menswear edits\">" + filterMarkup() + "<p class=\"filter-status\" id=\"filter-status\" aria-live=\"polite\">" + initial.length + (initial.length === 1 ? " edit" : " edits") + "</p></div><div class=\"comparison-grid\" id=\"comparison-grid\">" + (initialCards || "<div class=\"empty-results\"><h3>No edits match those filters.</h3><p>Try a broader price ceiling, another category, or a shorter search.</p><button class=\"button button--quiet\" type=\"button\" data-action=\"reset-filters\">Reset filters</button></div>") + "</div></section><section class=\"how-it-works\" aria-labelledby=\"how-title\"><div class=\"how-it-works__head\"><h2 id=\"how-title\">A little more than a price tag.</h2><p>We compare the shape and feel of a piece, then spell out where the alternative changes.</p></div><div class=\"steps\"><article class=\"step\"><span class=\"step__number\">01</span><div><h3>Start with the reference</h3><p>See what gives the premium piece its character: proportion, colour, texture, or finish.</p></div></article><article class=\"step\"><span class=\"step__number\">02</span><div><h3>Look at the details</h3><p>Each edit names three points of likeness and the trade-offs worth knowing.</p></div></article><article class=\"step\"><span class=\"step__number\">03</span><div><h3>Save the edit</h3><p>Keep a comparison and the alternative you would like to remember on this device.</p></div></article></div></section></main>";
+  return "<main class=\"page-shell\"><section class=\"hero\" aria-labelledby=\"home-title\"><div class=\"hero__copy\"><p class=\"eyebrow\">Expensive taste. Smarter prices.</p><h1 id=\"home-title\">The finer points of a knit.</h1><p class=\"hero__lede\">Brushed cashmere against fine merino: the same dark warmth, a smoother hand, and €624 between them.</p><a class=\"text-link\" href=\"#browse\">Browse the edits <span aria-hidden=\"true\">↓</span></a></div><div class=\"hero__pair\">" + featureMarkup() + "</div></section><section class=\"content-section\" id=\"browse\" aria-labelledby=\"browse-title\"><div class=\"section-head\"><h2 id=\"browse-title\">The edit, in detail</h2><p class=\"section-head__note\">Eight comparisons across knits, shirts, trousers and shoes</p></div><div class=\"filter-panel\" role=\"search\" aria-label=\"Filter menswear edits\">" + filterMarkup() + "<p class=\"filter-status\" id=\"filter-status\" aria-live=\"polite\">" + initial.length + (initial.length === 1 ? " edit" : " edits") + "</p></div><div class=\"comparison-grid\" id=\"comparison-grid\">" + (initialCards || "<div class=\"empty-results\"><h3>No edits match those filters.</h3><p>Try a broader price ceiling, another category, or a shorter search.</p><button class=\"button button--quiet\" type=\"button\" data-action=\"reset-filters\">Reset filters</button></div>") + "</div></section><section class=\"how-it-works\" aria-labelledby=\"how-title\"><div class=\"how-it-works__head\"><h2 id=\"how-title\">What makes a useful comparison?</h2><p>Price matters after shape, cloth and finish have been weighed against each other.</p></div><div class=\"steps\"><article class=\"step\"><span class=\"step__number\">01</span><div><h3>Read the line</h3><p>Rise, shoulder, collar and hem determine how the piece sits.</p></div></article><article class=\"step\"><span class=\"step__number\">02</span><div><h3>Feel the cloth</h3><p>Fibre, weight and finish change the drape and the way a garment wears.</p></div></article><article class=\"step\"><span class=\"step__number\">03</span><div><h3>Weigh the trade-off</h3><p>Each edit sets the saving beside the detail that gives way.</p></div></article></div></section></main>";
 }
 
 function savedPage() {
@@ -243,7 +275,11 @@ function savedPage() {
 }
 
 function detailProduct(product, role) {
-  return "<article class=\"detail-product\"><div class=\"" + stageClass(product) + "\">" + garmentSvg(product) + "</div>" + productMeta(product, false, role) + "</article>";
+  return "<article class=\"detail-product\">" + productMeta(product, false, role) + "</article>";
+}
+
+function detailPair(reference, alternative) {
+  return "<div class=\"detail-pair\"><figure class=\"compare-reveal\" style=\"--reveal:50%\"><div class=\"compare-reveal__layer compare-reveal__layer--alternative\">" + garmentImage(alternative, true) + "</div><div class=\"compare-reveal__layer compare-reveal__layer--reference\">" + garmentImage(reference, true) + "</div><figcaption class=\"compare-reveal__labels\"><span>Reference</span><span>Alternative</span></figcaption><input class=\"compare-reveal__range\" type=\"range\" min=\"0\" max=\"100\" value=\"50\" aria-label=\"Move the comparison reveal between the reference and alternative\"></figure><div class=\"detail-pair__meta\">" + detailProduct(reference, "Reference") + detailProduct(alternative, "Selected alternative") + "</div></div>";
 }
 
 function detailAnalysis(comparison, alternativeId) {
@@ -261,11 +297,10 @@ function detailAnalysis(comparison, alternativeId) {
   const picker = comparison.alternativeProductIds.length > 1
     ? "<div class=\"alternative-picker\"><span class=\"alternative-picker__label\" id=\"alternative-picker-label\">Choose an alternative</span><div class=\"alternative-options\" role=\"group\" aria-labelledby=\"alternative-picker-label\">" + alternatives + "</div></div>"
     : "";
-  const altPercent = Math.max(1, Math.round((alternative.priceAmount / reference.priceAmount) * 100));
   const matchList = matches.map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
   const differenceList = differences.slice(0, 3).map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
   const savedButton = saveButton(comparison, alternative.id, "detail");
-  return picker + "<div class=\"detail-value\"><div class=\"detail-value__copy\"><strong>Price difference</strong>" + money(reference.priceAmount) + " reference · " + money(alternative.priceAmount) + " alternative</div><div class=\"saving-block\"><strong>" + money(saving.amount) + "</strong><span>" + saving.percent + "% less</span></div></div><div class=\"price-comparison\" aria-label=\"Price comparison\"><div class=\"price-row\"><span>Reference</span><div class=\"price-row__track\"><div class=\"price-row__fill\" style=\"--bar-width:100%\"></div></div><span class=\"price-row__amount\">" + money(reference.priceAmount) + "</span></div><div class=\"price-row price-row--alternative\"><span>Alternative</span><div class=\"price-row__track\"><div class=\"price-row__fill\" style=\"--bar-width:" + altPercent + "%\"></div></div><span class=\"price-row__amount\">" + money(alternative.priceAmount) + "</span></div></div><div class=\"editorial-notes\"><section class=\"editorial-notes__column\" aria-labelledby=\"matches-title\"><h2 id=\"matches-title\">What matches</h2><ul>" + matchList + "</ul></section><section class=\"editorial-notes__column\" aria-labelledby=\"changes-title\"><h2 id=\"changes-title\">What changes</h2><ul>" + differenceList + "</ul></section></div><p class=\"editorial-reason\">" + escapeHtml(comparison.editorialReason) + "</p><div class=\"detail-actions\"><p>Fictional products and prices for a concept prototype. No purchase links.</p>" + savedButton + "</div>";
+  return picker + "<div class=\"detail-value\"><div class=\"detail-value__copy\"><strong>Price difference</strong>" + money(reference.priceAmount) + " reference · " + money(alternative.priceAmount) + " alternative</div><div class=\"saving-block\"><strong>" + money(saving.amount) + "</strong><span>" + saving.percent + "% less</span></div></div><div class=\"editorial-notes\"><section class=\"editorial-notes__column\" aria-labelledby=\"matches-title\"><h2 id=\"matches-title\">What matches</h2><ul>" + matchList + "</ul></section><section class=\"editorial-notes__column\" aria-labelledby=\"changes-title\"><h2 id=\"changes-title\">What changes</h2><ul>" + differenceList + "</ul></section></div><p class=\"editorial-reason\">" + escapeHtml(comparison.editorialReason) + "</p><div class=\"detail-actions\"><p>Fictional products and prices for a concept prototype. No purchase links.</p>" + savedButton + "</div>";
 }
 
 function relatedItems(comparison) {
@@ -281,7 +316,7 @@ function relatedItems(comparison) {
       return (bSameCategory - aSameCategory) || (bSameStyle - aSameStyle) || (a.item.editorialOrder - b.item.editorialOrder);
     })
     .slice(0, 3);
-  return related.map(({ item, product }) => "<a class=\"related-item\" href=\"/edit/" + escapeHtml(item.slug) + "\" data-link><span class=\"related-item__art\">" + garmentSvg(product) + "</span><span><strong>" + escapeHtml(item.title) + "</strong><span>" + escapeHtml(categoryLabels[product.category]) + " · " + escapeHtml(item.editTags[0]) + "</span></span></a>").join("");
+  return related.map(({ item, product }) => "<a class=\"related-item\" href=\"/edit/" + escapeHtml(item.slug) + "\" data-link><span class=\"related-item__art\">" + garmentImage(product) + "</span><span><strong>" + escapeHtml(item.title) + "</strong><span>" + escapeHtml(categoryLabels[product.category]) + " · " + escapeHtml(item.editTags[0]) + "</span></span></a>").join("");
 }
 
 function detailPage(comparison) {
@@ -290,7 +325,7 @@ function detailPage(comparison) {
   const alternative = productById[alternativeId];
   const category = categoryLabels[reference.category];
   const topTags = comparison.editTags.map((tag) => "<span class=\"detail-tag\">" + escapeHtml(tag) + "</span>").join("");
-  return "<main class=\"page-shell detail-page\"><nav class=\"detail-breadcrumb\" aria-label=\"Breadcrumb\"><a href=\"/\" data-link>All edits</a><span aria-hidden=\"true\">/</span><span>" + escapeHtml(category) + "</span></nav><header class=\"detail-intro\"><div><p class=\"eyebrow\">" + escapeHtml(category) + " · The comparison</p><h1>" + escapeHtml(comparison.title) + "</h1></div><p class=\"detail-intro__summary\">" + escapeHtml(comparison.editorialReason) + "</p></header><div class=\"detail-tags\">" + topTags + "</div><section class=\"detail-comparison\" id=\"detail-comparison\" aria-label=\"Price and editorial comparison\"><div class=\"detail-pair\" aria-label=\"Reference and alternative products\">" + detailProduct(reference, "Reference") + detailProduct(alternative, "Selected alternative") + "</div><div class=\"detail-analysis\" id=\"detail-analysis\">" + detailAnalysis(comparison, alternativeId) + "</div></section><section class=\"related-section\" aria-labelledby=\"related-title\"><div class=\"section-head\"><h2 id=\"related-title\">A related edit</h2><p class=\"section-head__note\">Another comparison from the same point of view</p></div><div class=\"related-list\">" + relatedItems(comparison) + "</div></section></main>";
+  return "<main class=\"page-shell detail-page\"><nav class=\"detail-breadcrumb\" aria-label=\"Breadcrumb\"><a href=\"/\" data-link>All edits</a><span aria-hidden=\"true\">/</span><span>" + escapeHtml(category) + "</span></nav><header class=\"detail-intro\"><div><p class=\"eyebrow\">" + escapeHtml(category) + " · The comparison</p><h1>" + escapeHtml(comparison.title) + "</h1></div><p class=\"detail-intro__summary\">" + escapeHtml(comparison.editorialReason) + "</p></header><div class=\"detail-tags\">" + topTags + "</div><section class=\"detail-comparison\" id=\"detail-comparison\" aria-label=\"Price and editorial comparison\">" + detailPair(reference, alternative) + "<div class=\"detail-analysis\" id=\"detail-analysis\">" + detailAnalysis(comparison, alternativeId) + "</div></section><section class=\"related-section\" aria-labelledby=\"related-title\"><div class=\"section-head\"><h2 id=\"related-title\">A related edit</h2><p class=\"section-head__note\">Another comparison from the same point of view</p></div><div class=\"related-list\">" + relatedItems(comparison) + "</div></section></main>";
 }
 
 function notFoundPage() {
@@ -308,6 +343,10 @@ function footer() {
 }
 
 function render() {
+  if (revealObserver) {
+    revealObserver.disconnect();
+    revealObserver = null;
+  }
   const route = currentRoute();
   let page = "";
   let active = "home";
@@ -330,6 +369,7 @@ function render() {
   }
   if (route.page !== "detail") document.title = route.page === "saved" ? "Saved edits — The Less Edit" : "The Less Edit — Expensive taste. Smarter prices.";
   appRoot.innerHTML = masthead(active) + page + footer();
+  observeReveals(appRoot);
 }
 
 function syncSavedButtons(comparisonId) {
@@ -366,8 +406,13 @@ function renderSavedList() {
     if (currentRoute().page === "saved") render();
     return;
   }
+  if (revealObserver) {
+    revealObserver.disconnect();
+    revealObserver = null;
+  }
   const savedPageMarkup = savedPage();
   appRoot.innerHTML = masthead("saved") + savedPageMarkup + footer();
+  observeReveals(appRoot);
 }
 
 function showToast(message, undo) {
@@ -420,7 +465,7 @@ function updateDetailAlternative(comparisonId, alternativeId, clickedButton) {
   window.setTimeout(() => {
     const reference = productById[comparison.referenceProductId];
     const alternative = productById[alternativeId];
-    panel.innerHTML = "<div class=\"detail-pair\" aria-label=\"Reference and selected alternative products\">" + detailProduct(reference, "Reference") + detailProduct(alternative, "Selected alternative") + "</div><div class=\"detail-analysis\" id=\"detail-analysis\">" + detailAnalysis(comparison, alternativeId) + "</div>";
+    panel.innerHTML = detailPair(reference, alternative) + "<div class=\"detail-analysis\" id=\"detail-analysis\">" + detailAnalysis(comparison, alternativeId) + "</div>";
     panel.classList.remove("is-switching");
     syncSavedButtons(comparisonId);
     const selected = panel.querySelector(".alternative-option[aria-pressed=\"true\"]");
@@ -444,6 +489,11 @@ document.addEventListener("click", (event) => {
   const link = event.target.closest("a[data-link]");
   if (link && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
     event.preventDefault();
+    if (link.getAttribute("href").startsWith("#")) {
+      const target = document.querySelector(link.getAttribute("href"));
+      if (target) target.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+      return;
+    }
     navigate(link.getAttribute("href"), true);
     return;
   }
@@ -482,6 +532,11 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  if (event.target && event.target.matches(".compare-reveal__range")) {
+    const reveal = event.target.closest(".compare-reveal");
+    if (reveal) reveal.style.setProperty("--reveal", event.target.value + "%");
+    return;
+  }
   if (event.target && event.target.id === "search-filter") {
     filterState.search = event.target.value;
     updateFeed();
@@ -492,6 +547,6 @@ document.addEventListener("change", (event) => {
   if (event.target && ["category-filter", "price-filter", "sort-filter"].includes(event.target.id)) updateFeedControls();
 });
 
-window.addEventListener("popstate", () => render());
+window.addEventListener("popstate", () => renderWithTransition());
 
 render();

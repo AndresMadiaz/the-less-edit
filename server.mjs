@@ -3,7 +3,8 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const rootDirectory = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const projectDirectory = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const rootDirectory = process.argv.includes("--dist") ? resolve(projectDirectory, "dist") : projectDirectory;
 const port = Number(process.env.PORT || 4173);
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -11,6 +12,8 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
+  ".avif": "image/avif",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml"
 };
 

@@ -10,16 +10,16 @@
   --color-rule-2: oklch(85% 0.014 54);
   --color-accent: oklch(35% 0.12 34);
   --color-accent-ink: oklch(96% 0.012 54);
-  --color-focus: oklch(37% 0.13 34);
+  --color-focus: oklch(25% 0.018 54);
   --color-control: oklch(38% 0.016 54);
   --color-success: oklch(42% 0.09 145);
   --color-error: oklch(42% 0.13 25);
 
-  --color-stage: oklch(92% 0.022 90);
-  --color-stage-sage: oklch(91% 0.025 145);
-  --color-stage-blue: oklch(92% 0.025 235);
-  --color-stage-clay: oklch(91% 0.026 46);
-  --color-stage-stone: oklch(91% 0.015 65);
+  --color-stage: #e4ddd2;
+  --color-stage-sage: #e4ddd2;
+  --color-stage-blue: #e4ddd2;
+  --color-stage-clay: #e4ddd2;
+  --color-stage-stone: #e4ddd2;
   --shadow-toast: 0 0.6rem 1.8rem oklch(28% 0.018 54 / 0.12);
 
   --font-display: "Cormorant Garamond", "Bodoni Moda", serif;
