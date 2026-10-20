@@ -1283,6 +1283,34 @@ h3 {
   font-size: var(--text-xs);
 }
 
+.detail-actions__sources {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.detail-actions__sources strong {
+  color: var(--color-ink-2);
+  font-weight: 600;
+}
+
+.detail-actions__sources a {
+  color: var(--color-ink-2);
+  text-underline-offset: 0.2em;
+}
+
+.product-stage__missing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .related-section {
   padding-block: var(--space-12) var(--space-16);
 }

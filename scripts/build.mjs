@@ -1,10 +1,19 @@
 import { cp, mkdir, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { products, validateCatalogue } from "../data.js";
 
 const projectDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const outputDirectory = resolve(projectDirectory, "dist");
 const staticFiles = ["index.html", "app.js", "data.js", "styles.css", "tokens.css"];
+
+validateCatalogue();
+
+for (const product of products) {
+  if (typeof product.imageUrl === "string" && product.imageUrl.startsWith("/") && !product.imageUrl.startsWith("/assets/garments/")) {
+    throw new Error(`Local product images must live under assets/garments: ${product.imageUrl}`);
+  }
+}
 
 await mkdir(outputDirectory, { recursive: true });
 for (const file of staticFiles) {
@@ -12,14 +21,26 @@ for (const file of staticFiles) {
 }
 
 const garmentDirectory = resolve(projectDirectory, "assets/garments");
-const garmentFiles = (await readdir(garmentDirectory)).filter((file) => file.endsWith(".avif"));
-if (garmentFiles.length !== 21) {
-  throw new Error(`Expected 21 optimized garment images; found ${garmentFiles.length}.`);
+const referencedLocalImages = [...new Set(products
+  .map((product) => product.imageUrl)
+  .filter((imageUrl) => typeof imageUrl === "string" && imageUrl.startsWith("/assets/garments/")))];
+for (const imageUrl of referencedLocalImages) {
+  const source = resolve(garmentDirectory, imageUrl.slice("/assets/garments/".length));
+  if (!source.startsWith(garmentDirectory + "/")) throw new Error(`Product image path escapes assets/garments: ${imageUrl}`);
+  let imageStats;
+  try { imageStats = await stat(source); }
+  catch { throw new Error(`Product image does not exist: ${imageUrl}`); }
+  if (!imageStats.isFile() || !imageStats.size) throw new Error(`Product image is empty or not a file: ${imageUrl}`);
 }
-for (const file of garmentFiles) {
-  const source = resolve(garmentDirectory, file);
-  if (!(await stat(source)).size) throw new Error(`Garment image is empty: ${file}`);
-}
-await cp(garmentDirectory, resolve(outputDirectory, "assets/garments"), { recursive: true });
 
-process.stdout.write(`Built static site with ${staticFiles.length} app files and ${garmentFiles.length} AVIF garments in dist/.\n`);
+let assetCount = 0;
+try {
+  const garmentFiles = await readdir(garmentDirectory);
+  assetCount = garmentFiles.length;
+  await cp(garmentDirectory, resolve(outputDirectory, "assets/garments"), { recursive: true });
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  if (referencedLocalImages.length) throw new Error("The catalogue references local garment images, but assets/garments is missing.");
+}
+
+process.stdout.write(`Built static site with ${staticFiles.length} app files and ${assetCount} local garment assets in dist/.\n`);
